@@ -216,7 +216,7 @@ func (pf *ProxyFetcher) checkAndFilterProxies() []string {
     return validProxies
 }
 
-// sendToTelegram sends the proxy list to a Telegram channel
+// sendToTelegram sends the proxy list to a Telegram channel in proxychains format
 func (pf *ProxyFetcher) sendToTelegram(proxies []string) error {
     botToken := os.Getenv("TELEGRAM_BOT_TOKEN")
     chatID := os.Getenv("TELEGRAM_CHANNEL_ID")
@@ -229,11 +229,19 @@ func (pf *ProxyFetcher) sendToTelegram(proxies []string) error {
         return fmt.Errorf("no proxies to send")
     }
 
-    // Prepare message
+    // Prepare message in proxychains format
     timestamp := time.Now().Format("2006-01-02 15:04:05")
-    header := fmt.Sprintf("Proxy List - Updated: %s\nTotal working proxies: %d\nSources used: %d\n\n", timestamp, len(proxies), len(pf.sources))
-    proxyList := strings.Join(proxies, "\n")
-    message := header + proxyList
+    header := fmt.Sprintf("# Proxychains Proxy List - Updated: %s\n# Total working proxies: %d\n# Sources used: %d\n\n", timestamp, len(proxies), len(pf.sources))
+    var proxyLines []string
+    for _, proxy := range proxies {
+        parts := strings.Split(proxy, ":")
+        if len(parts) == 2 {
+            proxyLines = append(proxyLines, fmt.Sprintf("http %s %s", parts[0], parts[1]))
+        }
+    }
+    proxyList := strings.Join(proxyLines, "\n")
+    // Wrap in Markdown code block for monospace
+    message := fmt.Sprintf("```\n%s%s\n```", header, proxyList)
 
     // Telegram message size limit is 4096 characters; split if necessary
     const maxMessageSize = 4096
@@ -243,16 +251,18 @@ func (pf *ProxyFetcher) sendToTelegram(proxies []string) error {
 
     // Split into multiple messages
     var messages []string
-    current := header
-    for _, proxy := range proxies {
-        line := proxy + "\n"
-        if len(current)+len(line) > maxMessageSize {
+    current := "```\n" + header
+    for _, line := range proxyLines {
+        nextLine := line + "\n"
+        if len(current)+len(nextLine)+3 > maxMessageSize { // +3 for closing ```
+            current += "```"
             messages = append(messages, current)
-            current = header
+            current = "```\n" + header
         }
-        current += line
+        current += nextLine
     }
-    if len(current) > len(header) {
+    if len(current) > len("```\n"+header) {
+        current += "```"
         messages = append(messages, current)
     }
 
@@ -268,12 +278,13 @@ func (pf *ProxyFetcher) sendToTelegram(proxies []string) error {
     return nil
 }
 
-// sendTelegramMessage sends a single message to Telegram
+// sendTelegramMessage sends a single message to Telegram with Markdown parsing
 func sendTelegramMessage(botToken, chatID, message string) error {
     apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", botToken)
     data := url.Values{
-        "chat_id": {chatID},
-        "text":    {message},
+        "chat_id":    {chatID},
+        "text":       {message},
+        "parse_mode": {"MarkdownV2"}, // Enable Markdown formatting
     }
 
     resp, err := http.PostForm(apiURL, data)
@@ -329,7 +340,7 @@ func (pf *ProxyFetcher) saveProxies() {
         fmt.Fprintf(file, "# Proxychains configuration - Updated: %s\n", timestamp)
         fmt.Fprintf(file, "# Total working proxies: %d\n", len(proxies))
         fmt.Fprintf(file, "# Sources used: %d\n", len(pf.sources))
-        fmt.Fprintf(file, "# Format: http <IP> <port>\n\n")
+        fmt.Fprintf(file, "# Format: http < BeethovenIP> <port>\n\n")
 
         for _, proxy := range proxies {
             parts := strings.Split(proxy, ":")
