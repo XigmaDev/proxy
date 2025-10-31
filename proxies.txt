@@ -1,7 +1,6 @@
-# Proxy List - Updated: 2025-10-31 22:42:26
-# Total working proxies: 3
+# Proxy List - Updated: 2025-10-31 22:53:59
+# Total working proxies: 2
 # Sources used: 3
 
-38.194.253.30:999
 103.92.218.121:9514
-154.16.146.43:80
+200.106.165.77:999
